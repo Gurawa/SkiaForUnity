@@ -212,6 +212,11 @@ namespace SkiaSharp.Unity.HB {
 		public virtual string text {
 			get => Text;
 			set {
+				// Unchanged text must NOT re-shape/re-rasterize. Game timers assign
+				// the same string every frame (60x/s) — without this guard each
+				// assignment forced a full Skia render = constant main-thread burn
+				// on device. Mirrors the != guards on every other property here.
+				if (Text == value) return;
 				Text = value;
 				ReUpdate();
 				onTextChanged?.Invoke();
