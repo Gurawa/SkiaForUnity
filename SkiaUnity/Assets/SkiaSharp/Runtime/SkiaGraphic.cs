@@ -404,11 +404,14 @@ namespace SkiaSharp.Unity {
 			}
 		}
 
+		private RectTransform _cachedRT;
+
 		void Update() {
 			if (rawImage == null) return;
 			if (bakedSprite != null) return;
 
-			RectTransform rt = GetComponent<RectTransform>();
+			// Cached: GetComponent per frame on every instance is waste.
+			RectTransform rt = _cachedRT != null ? _cachedRT : (_cachedRT = GetComponent<RectTransform>());
 			if (rt == null) return;
 
 			int w = ScaledRoundTo4(rt.rect.width);
@@ -427,7 +430,7 @@ namespace SkiaSharp.Unity {
 		// --- Rendering ---
 
 		void Render() {
-			RectTransform rt = GetComponent<RectTransform>();
+			RectTransform rt = _cachedRT != null ? _cachedRT : (_cachedRT = GetComponent<RectTransform>());
 			if (rt == null) return;
 
 			float shapeW = rt.rect.width;
