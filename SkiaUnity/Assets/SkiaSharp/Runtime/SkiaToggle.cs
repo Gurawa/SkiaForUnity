@@ -23,6 +23,11 @@ namespace SkiaSharp.Unity {
 		[SerializeField] string onText = "ON";
 		[SerializeField] string offText = "OFF";
 
+		[Header("Layout")]
+		[SerializeField] float knobPadding = 6f;
+		[SerializeField] Vector2 statusTextOffsetOn = Vector2.zero;
+		[SerializeField] Vector2 statusTextOffsetOff = Vector2.zero;
+
 		[Header("Colors")]
 		[SerializeField] Color offColor = new Color(0.85f, 0.25f, 0.22f, 1f);
 		[SerializeField] Color onColor = new Color(0.20f, 0.78f, 0.35f, 1f);
@@ -186,18 +191,17 @@ namespace SkiaSharp.Unity {
 
 			float bgWidth = bgRT.rect.width;
 			float knobSize = knobRT.sizeDelta.x;
-			float padding = 6f;
 
-			float offX = padding + knobSize * 0.5f;
-			float onX = bgWidth - padding - knobSize * 0.5f;
+			float offX = knobPadding + knobSize * 0.5f;
+			float onX = bgWidth - knobPadding - knobSize * 0.5f;
 			float x = Mathf.Lerp(offX, onX, t);
 
 			knobRT.anchoredPosition = new Vector2(x, 0);
 
-			// Status text sits where the knob ISN'T
 			if (statusRT != null) {
-				float textX = m_IsOn ? offX : onX;
-				statusRT.anchoredPosition = new Vector2(textX, 0);
+				Vector2 offset = m_IsOn ? statusTextOffsetOn : statusTextOffsetOff;
+				float textX = (m_IsOn ? offX : onX) + offset.x;
+				statusRT.anchoredPosition = new Vector2(textX, offset.y);
 			}
 		}
 

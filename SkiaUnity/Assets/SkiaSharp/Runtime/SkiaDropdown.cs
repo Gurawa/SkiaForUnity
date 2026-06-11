@@ -11,6 +11,12 @@ namespace SkiaSharp.Unity {
 	[AddComponentMenu("Skia UI (Canvas)/Skia Dropdown")]
 	public class SkiaDropdown : Selectable, IPointerClickHandler, ICancelHandler {
 
+		public enum CaptionDisplayMode {
+			Text,
+			Icon,
+			IconAndText
+		}
+
 		[Serializable]
 		public class OptionData {
 			public string text;
@@ -23,6 +29,7 @@ namespace SkiaSharp.Unity {
 		[Header("References")]
 		[SerializeField] SkiaGraphic background;
 		[SerializeField] HB.HB_TEXTBlock captionText;
+		[SerializeField] SkiaGraphic captionIcon;
 		[SerializeField] RectTransform arrow;
 
 		[Header("Template")]
@@ -31,8 +38,12 @@ namespace SkiaSharp.Unity {
 		[SerializeField] float itemCornerRadius = 16f;
 		[SerializeField] float panelPadding = 12f;
 		[SerializeField] float maxDropdownHeight = 600f;
+		[SerializeField] float minDropdownWidth = 0f;
 		[SerializeField] float iconSize = 80f;
 		[SerializeField] Vector4 dropdownCornerRadii = new Vector4(24, 24, 24, 24);
+
+		[Header("Display")]
+		[SerializeField] CaptionDisplayMode displayMode = CaptionDisplayMode.Text;
 
 		[Header("State")]
 		[SerializeField] int m_Value;
@@ -86,10 +97,25 @@ namespace SkiaSharp.Unity {
 		public SkiaGraphic Background => background;
 		public HB.HB_TEXTBlock CaptionText => captionText;
 
+		public CaptionDisplayMode DisplayMode {
+			get => displayMode;
+			set { displayMode = value; RefreshCaption(); }
+		}
+
 		public void SetOptions(params string[] items) {
 			m_Options.Clear();
 			foreach (var item in items)
 				m_Options.Add(new OptionData(item));
+			m_Value = Mathf.Clamp(m_Value, 0, Mathf.Max(0, m_Options.Count - 1));
+			RefreshCaption();
+		}
+
+		public void SetOptions(Texture2D[] icons, string[] labels = null) {
+			m_Options.Clear();
+			for (int i = 0; i < icons.Length; i++) {
+				string label = labels != null && i < labels.Length ? labels[i] : "";
+				m_Options.Add(new OptionData(label, icons[i]));
+			}
 			m_Value = Mathf.Clamp(m_Value, 0, Mathf.Max(0, m_Options.Count - 1));
 			RefreshCaption();
 		}
@@ -141,11 +167,27 @@ namespace SkiaSharp.Unity {
 #endif
 
 		private void RefreshCaption() {
-			if (captionText == null) return;
-			if (m_Options.Count > 0 && m_Value >= 0 && m_Value < m_Options.Count)
-				captionText.text = m_Options[m_Value].text;
-			else
-				captionText.text = "";
+			bool hasValidOption = m_Options.Count > 0 && m_Value >= 0 && m_Value < m_Options.Count;
+			Texture2D optionIcon = hasValidOption ? m_Options[m_Value].icon : null;
+			string optionText = hasValidOption ? m_Options[m_Value].text : "";
+
+			bool showIcon = optionIcon != null && displayMode != CaptionDisplayMode.Text;
+			bool showText = displayMode != CaptionDisplayMode.Icon || optionIcon == null;
+
+			if (captionIcon != null) {
+				if (showIcon) {
+					captionIcon.FillType = SkiaFillType.Image;
+					captionIcon.FillImage = optionIcon;
+					captionIcon.gameObject.SetActive(true);
+				} else {
+					captionIcon.gameObject.SetActive(false);
+				}
+			}
+
+			if (captionText != null) {
+				captionText.text = showText ? optionText : "";
+				captionText.gameObject.SetActive(showText);
+			}
 
 			if (background != null)
 				background.FillColor = IsInteractable() ? dropdownColor : disabledColor;
@@ -312,27 +354,50 @@ namespace SkiaSharp.Unity {
 			RectTransformUtility.ScreenPointToLocalPointInRectangle(
 				canvasRT, RectTransformUtility.WorldToScreenPoint(null, worldCorners[2]), null, out localTR);
 
-			float dropdownWidth = localTR.x - localBL.x;
+			float dropdownWidth = Mathf.Max(localTR.x - localBL.x, minDropdownWidth);
+
+			// Canvas bounds
+			float canvasLeft = -canvasRT.rect.width * canvasRT.pivot.x;
+			float canvasRight = canvasRT.rect.width * (1f - canvasRT.pivot.x);
+			float canvasBottom = -canvasRT.rect.height * canvasRT.pivot.y;
+			float canvasTop = canvasRT.rect.height * (1f - canvasRT.pivot.y);
 
 			panelRT.anchorMin = new Vector2(0.5f, 0.5f);
 			panelRT.anchorMax = new Vector2(0.5f, 0.5f);
-			panelRT.pivot = new Vector2(0.5f, 1f);
 			panelRT.sizeDelta = new Vector2(dropdownWidth, totalHeight);
 
+			// Try below first
 			float centerX = (localBL.x + localTR.x) * 0.5f;
 			float belowY = localBL.y - 8f;
-			panelRT.anchoredPosition = new Vector2(centerX, belowY);
+			bool fitsBelow = belowY - totalHeight >= canvasBottom;
+			bool fitsAbove = localTR.y + 8f + totalHeight <= canvasTop;
 
-			float canvasBottom = -canvasRT.rect.height * canvasRT.pivot.y;
-			if (belowY - totalHeight < canvasBottom) {
+			if (fitsBelow) {
+				panelRT.pivot = new Vector2(0.5f, 1f);
+				panelRT.anchoredPosition = new Vector2(centerX, belowY);
+			} else if (fitsAbove) {
 				panelRT.pivot = new Vector2(0.5f, 0f);
 				panelRT.anchoredPosition = new Vector2(centerX, localTR.y + 8f);
+			} else {
+				// Doesn't fit either way — clamp to canvas and shrink height
+				float availableHeight = canvasTop - canvasBottom - 16f;
+				panelRT.sizeDelta = new Vector2(dropdownWidth, Mathf.Min(totalHeight, availableHeight));
+				panelRT.pivot = new Vector2(0.5f, 1f);
+				panelRT.anchoredPosition = new Vector2(centerX, canvasTop - 8f);
 			}
+
+			// Clamp horizontal — keep menu fully on screen
+			Vector2 pos = panelRT.anchoredPosition;
+			float halfW = dropdownWidth * 0.5f;
+			if (pos.x - halfW < canvasLeft) pos.x = canvasLeft + halfW;
+			if (pos.x + halfW > canvasRight) pos.x = canvasRight - halfW;
+			panelRT.anchoredPosition = pos;
 		}
 
 		private void CreateItem(RectTransform parent, int index) {
 			bool selected = index == m_Value;
-			bool hasIcon = m_Options[index].icon != null;
+			bool hasIcon = m_Options[index].icon != null && displayMode != CaptionDisplayMode.Text;
+			bool hasText = displayMode != CaptionDisplayMode.Icon || m_Options[index].icon == null;
 			float yPos = index * (itemHeight + itemSpacing);
 
 			var itemGO = new GameObject($"Item_{index}", typeof(RectTransform), typeof(CanvasRenderer));
@@ -386,7 +451,7 @@ namespace SkiaSharp.Unity {
 			labelRT.offsetMax = new Vector2(-24, 0);
 
 			var textBlock = labelGO.AddComponent<HB.HB_TEXTBlock>();
-			textBlock.text = m_Options[index].text;
+			textBlock.text = hasText ? m_Options[index].text : "";
 			textBlock.FontSize = captionText != null ? captionText.FontSize : 48;
 			textBlock.FontColor = selected ? itemSelectedTextColor : itemTextColor;
 			textBlock.TextAlignment = hasIcon
@@ -395,6 +460,7 @@ namespace SkiaSharp.Unity {
 			textBlock.VAlign = HB.HB_TEXTBlock.VerticalAlignment.Middle;
 			if (captionText != null && captionText.Font != null)
 				textBlock.Font = captionText.Font;
+			if (!hasText) labelGO.SetActive(false);
 
 			// Checkmark for selected item
 			if (selected) {

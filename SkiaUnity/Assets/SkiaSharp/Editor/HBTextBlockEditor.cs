@@ -1283,6 +1283,7 @@ public class HBTextBlockOpenCallback {
       // Skip prefab assets — only render objects in loaded scenes
       if (EditorUtility.IsPersistent(textBlock)) continue;
       if (!textBlock.gameObject.scene.isLoaded) continue;
+      if (!textBlock.gameObject.activeInHierarchy) continue;
       if (textBlock.IsBaked) continue;
       if (string.IsNullOrEmpty(textBlock.text)) continue;
       textBlock.ReUpdateEditMode();

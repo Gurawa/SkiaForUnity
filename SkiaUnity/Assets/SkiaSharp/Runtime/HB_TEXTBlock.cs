@@ -796,6 +796,7 @@ namespace SkiaSharp.Unity.HB {
 			if (surface == null) {
 				surface = SKSurface.Create(info);
 			}
+			if (surface == null) return;
 			canvas = surface.Canvas;
 			canvas.Clear();
 			canvas.ResetMatrix();

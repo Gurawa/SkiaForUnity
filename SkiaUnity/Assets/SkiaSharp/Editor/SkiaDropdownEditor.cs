@@ -9,9 +9,10 @@ using UnityEngine;
 [CanEditMultipleObjects]
 public class SkiaDropdownEditor : Editor {
 
-	SerializedProperty background, captionText;
+	SerializedProperty background, captionText, captionIcon;
 	SerializedProperty arrow;
-	SerializedProperty itemHeight, itemSpacing, itemCornerRadius, panelPadding, maxDropdownHeight, iconSize, dropdownCornerRadii;
+	SerializedProperty displayMode;
+	SerializedProperty itemHeight, itemSpacing, itemCornerRadius, panelPadding, maxDropdownHeight, minDropdownWidth, iconSize, dropdownCornerRadii;
 	SerializedProperty m_Value, m_Options;
 	SerializedProperty dropdownColor, panelColor, itemNormalColor, itemHoverColor, itemSelectedColor;
 	SerializedProperty itemTextColor, itemSelectedTextColor, disabledColor, overlayColor;
@@ -22,12 +23,15 @@ public class SkiaDropdownEditor : Editor {
 	void OnEnable() {
 		background = serializedObject.FindProperty("background");
 		captionText = serializedObject.FindProperty("captionText");
+		captionIcon = serializedObject.FindProperty("captionIcon");
 		arrow = serializedObject.FindProperty("arrow");
+		displayMode = serializedObject.FindProperty("displayMode");
 		itemHeight = serializedObject.FindProperty("itemHeight");
 		itemSpacing = serializedObject.FindProperty("itemSpacing");
 		itemCornerRadius = serializedObject.FindProperty("itemCornerRadius");
 		panelPadding = serializedObject.FindProperty("panelPadding");
 		maxDropdownHeight = serializedObject.FindProperty("maxDropdownHeight");
+		minDropdownWidth = serializedObject.FindProperty("minDropdownWidth");
 		iconSize = serializedObject.FindProperty("iconSize");
 		dropdownCornerRadii = serializedObject.FindProperty("dropdownCornerRadii");
 		m_Value = serializedObject.FindProperty("m_Value");
@@ -76,7 +80,12 @@ public class SkiaDropdownEditor : Editor {
 		EditorGUILayout.LabelField("References", EditorStyles.boldLabel);
 		EditorGUILayout.PropertyField(background);
 		EditorGUILayout.PropertyField(captionText);
+		EditorGUILayout.PropertyField(captionIcon, new GUIContent("Caption Icon (optional)"));
 		EditorGUILayout.PropertyField(arrow);
+
+		EditorGUILayout.Space();
+		EditorGUILayout.LabelField("Display", EditorStyles.boldLabel);
+		EditorGUILayout.PropertyField(displayMode, new GUIContent("Display Mode"));
 
 		EditorGUILayout.Space();
 		EditorGUILayout.LabelField("Template", EditorStyles.boldLabel);
@@ -85,6 +94,7 @@ public class SkiaDropdownEditor : Editor {
 		EditorGUILayout.PropertyField(itemCornerRadius);
 		EditorGUILayout.PropertyField(panelPadding);
 		EditorGUILayout.PropertyField(maxDropdownHeight);
+		EditorGUILayout.PropertyField(minDropdownWidth, new GUIContent("Min Menu Width"));
 		EditorGUILayout.PropertyField(iconSize);
 		EditorGUILayout.PropertyField(dropdownCornerRadii);
 
