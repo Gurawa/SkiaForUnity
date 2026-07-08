@@ -773,8 +773,12 @@ namespace SkiaSharp.Unity.HB {
 				return;
 			}
 
-			int roundedWidth = Mathf.CeilToInt(rectTransform.rect.width / 4) * 4;
-			int roundedHeight = Mathf.CeilToInt(rectTransform.rect.height / 4) * 4;
+			Canvas rootCanvas = GetComponentInParent<Canvas>();
+			float scaleFactor = rootCanvas != null ? rootCanvas.scaleFactor : 1f;
+
+			int roundedWidth = Mathf.CeilToInt((rectTransform.rect.width * scaleFactor) / 4f) * 4;
+			int roundedHeight = Mathf.CeilToInt((rectTransform.rect.height * scaleFactor) / 4f) * 4;
+
 
 			SKColorType targetColorType = (colorType == HBColorFormat.alpha8 && !enableBgFill) ? SKColorType.Alpha8 : SKColorType.Rgba8888;
 
@@ -800,13 +804,16 @@ namespace SkiaSharp.Unity.HB {
 			canvas = surface.Canvas;
 			canvas.Clear();
 			canvas.ResetMatrix();
-			canvas.Scale(1, -1);
+			canvas.Scale(scaleFactor, -scaleFactor);
+
+			float localTexWidth = info.Width / scaleFactor;
+			float localTexHeight = info.Height / scaleFactor;
 
 			// Draw background shape before text
 			if (enableBgFill) {
 				float bgPadX = enableBgShadow ? (bgShadowBlur + Mathf.Abs(bgShadowOffset.x)) : 0;
 				float bgPadY = enableBgShadow ? (bgShadowBlur + Mathf.Abs(bgShadowOffset.y)) : 0;
-				DrawBgBackground(canvas, roundedWidth, roundedHeight, bgPadX, bgPadY);
+				DrawBgBackground(canvas, localTexWidth, localTexHeight, bgPadX, bgPadY);
 			}
 
 			// Calculate vertical offset based on alignment
@@ -815,11 +822,11 @@ namespace SkiaSharp.Unity.HB {
 			float translateX = baseEffectPadX + userPadL;
 			float verticalOffset;
 			if (verticalAlignment == VerticalAlignment.Middle) {
-				verticalOffset = (-info.Height + (currentHeight - rs.MeasuredHeight) / 2);
+				verticalOffset = (-localTexHeight + (currentHeight - rs.MeasuredHeight) / 2);
 			} else if (verticalAlignment == VerticalAlignment.Bottom) {
-				verticalOffset = -info.Height + (currentHeight - rs.MeasuredHeight) - userPadB;
+				verticalOffset = -localTexHeight + (currentHeight - rs.MeasuredHeight) - userPadB;
 			} else {
-				verticalOffset = -info.Height + baseEffectPadY + userPadT;
+				verticalOffset = -localTexHeight + baseEffectPadY + userPadT;
 			}
 			canvas.Translate(translateX, verticalOffset);
 
@@ -850,13 +857,22 @@ namespace SkiaSharp.Unity.HB {
 				if (blockGradient == null || hash != _cachedGradColorHash) {
 					blockGradient = TextGradient.Linear(_cachedGradColors, gradiantPositions, gradiantAngle);
 					_cachedGradColorHash = hash;
-					if (_cachedPaintOptions == null)
+					if (_cachedPaintOptions == null) {
 						_cachedPaintOptions = new TextPaintOptions();
+						_cachedPaintOptions.IsAntialias = true;
+						_cachedPaintOptions.LcdRenderText = true;
+					}
 					_cachedPaintOptions.TextGradient = blockGradient;
 				}
 				rs.Paint(canvas, _cachedPaintOptions);
 			} else {
-				rs.Paint(canvas);
+				if (_cachedPaintOptions == null) {
+					_cachedPaintOptions = new TextPaintOptions();
+					_cachedPaintOptions.IsAntialias = true;
+					_cachedPaintOptions.LcdRenderText = true;
+				}
+				_cachedPaintOptions.TextGradient = null;
+				rs.Paint(canvas, _cachedPaintOptions);
 			}
 
 			pixmap = surface.PeekPixels();
@@ -878,7 +894,7 @@ namespace SkiaSharp.Unity.HB {
 
 		// ── Background Shape Drawing ──────────────────────────────────────
 
-		void DrawBgBackground(SKCanvas c, int surfaceW, int surfaceH, float bgPadX, float bgPadY) {
+		void DrawBgBackground(SKCanvas c, float surfaceW, float surfaceH, float bgPadX, float bgPadY) {
 			if (_bgPaint == null) _bgPaint = new SKPaint { IsAntialias = true };
 
 			c.Save();
@@ -1192,10 +1208,10 @@ namespace SkiaSharp.Unity.HB {
 		}
 
 		// Computes the same canvas transform used in RenderText.
-		// Canvas does Scale(1,-1) then Translate(translateX, verticalOffset).
+		// Canvas does Scale(scaleFactor, -scaleFactor) then Translate(translateX, verticalOffset).
 		// TextBlock point (tx,ty) → surface pixel (tx+translateX, -(ty+verticalOffset)).
 		// Surface pixel (0,0) maps to bottom of Unity RawImage.
-		private void GetRenderTransform(out float translateX, out float verticalOffset, out int surfW, out int surfH) {
+		private void GetRenderTransform(out float translateX, out float verticalOffset, out float surfW, out float surfH) {
 			float epX = 0f, epY = 0f;
 			if (outlineWidth > 0) {
 				float oe = outlineWidth + outlineBlur;
@@ -1216,8 +1232,17 @@ namespace SkiaSharp.Unity.HB {
 
 			float rectW = rectTransform.rect.width;
 			float rectH = rectTransform.rect.height;
-			surfW = Mathf.CeilToInt(rectW / 4) * 4;
-			surfH = Mathf.CeilToInt(rectH / 4) * 4;
+			
+			Canvas rootCanvas = GetComponentInParent<Canvas>();
+			float scaleFactor = rootCanvas != null ? rootCanvas.scaleFactor : 1f;
+			
+			// We calculate physical surf size exactly like RenderText did
+			int physSurfW = Mathf.CeilToInt((rectW * scaleFactor) / 4f) * 4;
+			int physSurfH = Mathf.CeilToInt((rectH * scaleFactor) / 4f) * 4;
+			
+			// Translate back to local sizes for hit-testing math
+			surfW = physSurfW / scaleFactor;
+			surfH = physSurfH / scaleFactor;
 
 			if (verticalAlignment == VerticalAlignment.Middle)
 				verticalOffset = -surfH + (rectH - rs.MeasuredHeight) / 2f;
@@ -1239,7 +1264,7 @@ namespace SkiaSharp.Unity.HB {
 			var caretInfo = rs.GetCaretInfo(new Topten.RichTextKit.CaretPosition(clampedIndex));
 			if (caretInfo.IsNone) return false;
 
-			GetRenderTransform(out float translateX, out float verticalOffset, out int surfW, out int surfH);
+			GetRenderTransform(out float translateX, out float verticalOffset, out float surfW, out float surfH);
 
 			// TextBlock (tx,ty) → surface (tx+translateX, -(ty+verticalOffset))
 			float surfX = caretInfo.CaretRectangle.Left + translateX;
@@ -1267,7 +1292,7 @@ namespace SkiaSharp.Unity.HB {
 		public int HitTestLocal(Vector2 localPoint) {
 			if (rs == null) return 0;
 
-			GetRenderTransform(out float translateX, out float verticalOffset, out int surfW, out int surfH);
+			GetRenderTransform(out float translateX, out float verticalOffset, out float surfW, out float surfH);
 
 			// Local → surface
 			Rect rect = rectTransform.rect;
